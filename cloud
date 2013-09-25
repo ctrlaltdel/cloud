@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+#
+# cloud - an easy to use tool for spawing disposable VM on an Openstack
+#         cloud
+#
+# Francois Deppierraz <francois.deppierraz@nimag.net>
+#
+# License GPLv2+ applies
+
+import os
+import sys
+import time
+import subprocess
+import pickle
+import tempfile
+import logging
+
+IMAGE     = 'raring-server-cloudimg-amd64'
+USER      = 'ubuntu'
+FLAVOR    = 'm1.small'
+KEY_NAME  = os.environ['USER']
+SEC_GROUP = 'all'
+DEBUG     = True
+
+KNOWN_HOSTS = tempfile.NamedTemporaryFile()
+
+def setup_environment():
+  if not 'OS_PASSWORD' in os.environ:
+    source = '. ~/.openrc'
+    dump = '/usr/bin/python -c "import os,pickle;print pickle.dumps(os.environ)"'
+    penv = os.popen('%s && %s' %(source,dump))
+    env = pickle.loads(penv.read())
+    os.environ = env
+  
+  if not 'OS_PASSWORD' in os.environ:
+    raise Exception('No Openstack environnment variables found!')
+
+
+def ssh(args):
+  logging.debug("ssh " + repr(args))
+  return subprocess.call(['ssh', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
+
+def scp(args):
+  logging.debug("scp" + repr(args))
+  return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
+
+def main(script=None):
+  logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
+  
+  try:
+    from novaclient.v1_1 import client
+    nt = client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
+  
+    image = filter(lambda im: im.name == IMAGE, nt.images.list())[0]
+    flavor = nt.flavors.find(name=FLAVOR)
+  
+    ip = nt.floating_ips.create('public')
+    logging.debug("IP %s" % ip.ip)
+  
+    instance = nt.servers.create(name='cloud script disposable vm', image=image.id, flavor=flavor.id, key_name=KEY_NAME)
+    logging.debug("Instance %s" % instance.id)
+  
+    while True:
+      instance = nt.servers.get(instance.id)
+      if instance.status == 'ERROR':
+        raise Exception('Instance creation failure')
+      if instance.addresses != {}:
+        break
+      else:
+        logging.debug(instance.status)
+        time.sleep(1)
+    instance.add_floating_ip(ip)
+    instance.add_security_group(SEC_GROUP)
+  
+    while True:
+      res = ssh(['%s@%s' % (USER, ip.ip), 'echo'])
+      if res == 0:
+        break
+      else:
+        time.sleep(5)
+
+    if script:
+      scp([script, '%s@%s:/tmp/script' % (USER, ip.ip)])
+      ssh(['%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && /tmp/script'])
+    else:
+      ssh(['%s@%s' % (USER, ip.ip)])
+
+  finally:
+    logging.debug("Cleanup...")
+  
+    try:
+      instance.delete()
+      logging.debug("Instance deleted")
+    except:
+      pass
+  
+    try:
+      ip.delete()
+      logging.debug("IP deleted")
+    except:
+      pass
+
+def usage():
+  print("Usage: %s [script]" % sys.argv[0])
+
+if __name__ == '__main__':
+  try:
+    setup_environment()
+
+    if len(sys.argv) == 2:
+      script = os.path.abspath(sys.argv[1])
+      main(script)
+    else:
+      main()
+  finally:
+    KNOWN_HOSTS.close()
