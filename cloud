@@ -20,9 +20,13 @@ USER      = 'ubuntu'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
 SEC_GROUP = 'all'
-DEBUG     = True
+DEBUG     = False
 
 KNOWN_HOSTS = tempfile.NamedTemporaryFile()
+
+if DEBUG:
+  logger = logging.getLogger()
+  logger.setLevel(logging.DEBUG)
 
 def setup_environment():
   if not 'OS_PASSWORD' in os.environ:
@@ -62,12 +66,12 @@ def main(script=None):
   
     while True:
       instance = nt.servers.get(instance.id)
+      logging.debug(instance.status)
       if instance.status == 'ERROR':
         raise Exception('Instance creation failure')
       if instance.addresses != {}:
         break
       else:
-        logging.debug(instance.status)
         time.sleep(1)
     instance.add_floating_ip(ip)
     instance.add_security_group(SEC_GROUP)
