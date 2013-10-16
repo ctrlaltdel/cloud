@@ -14,19 +14,15 @@ import subprocess
 import pickle
 import tempfile
 import logging
+import argparse
 
 IMAGE     = 'raring-server-cloudimg-amd64'
 USER      = 'ubuntu'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
 SEC_GROUP = 'all'
-DEBUG     = False
 
 KNOWN_HOSTS = tempfile.NamedTemporaryFile()
-
-if DEBUG:
-  logger = logging.getLogger()
-  logger.setLevel(logging.DEBUG)
 
 def setup_environment():
   if not 'OS_PASSWORD' in os.environ:
@@ -108,12 +104,22 @@ def usage():
   print("Usage: %s [script]" % sys.argv[0])
 
 if __name__ == '__main__':
+  global DEBUG
+
+  parser = argparse.ArgumentParser(description='Easy to use tool for spawing disposable VM on an Openstack')
+  parser.add_argument('--debug', '-d', action='store_true')
+  parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
+  args = parser.parse_args()
+
+  if args.debug:
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
   try:
     setup_environment()
 
-    if len(sys.argv) == 2:
-      script = os.path.abspath(sys.argv[1])
-      main(script)
+    if args.script:
+      main(os.path.abspath(args.script))
     else:
       main()
   finally:
