@@ -44,15 +44,15 @@ def scp(args):
   logging.debug("scp" + repr(args))
   return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
-def main(script=None):
+def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
   try:
     from novaclient.v1_1 import client
     nt = client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
   
-    image = filter(lambda im: im.name == IMAGE, nt.images.list())[0]
-    flavor = nt.flavors.find(name=FLAVOR)
+    image = filter(lambda im: im.name == args.image, nt.images.list())[0]
+    flavor = nt.flavors.find(name=args.flavor)
   
     ip = nt.floating_ips.create('public')
     logging.debug("IP %s" % ip.ip)
@@ -79,8 +79,8 @@ def main(script=None):
       else:
         time.sleep(5)
 
-    if script:
-      scp([script, '%s@%s:/tmp/script' % (USER, ip.ip)])
+    if args.script:
+      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ip.ip)])
       ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && /tmp/script'])
     else:
       ssh(['-t', '%s@%s' % (USER, ip.ip)])
@@ -108,6 +108,8 @@ if __name__ == '__main__':
 
   parser = argparse.ArgumentParser(description='Easy to use tool for spawing disposable VM on an Openstack')
   parser.add_argument('--debug', '-d', action='store_true')
+  parser.add_argument('--image', '-i', default=IMAGE)
+  parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
@@ -117,10 +119,6 @@ if __name__ == '__main__':
 
   try:
     setup_environment()
-
-    if args.script:
-      main(os.path.abspath(args.script))
-    else:
-      main()
+    main(args)
   finally:
     KNOWN_HOSTS.close()
