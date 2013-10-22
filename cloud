@@ -21,6 +21,7 @@ USER      = 'ubuntu'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
 SEC_GROUP = 'all'
+NAME      = 'cloud-script-disposable-vm'
 
 KNOWN_HOSTS = tempfile.NamedTemporaryFile()
 
@@ -57,7 +58,7 @@ def main(args):
     ip = nt.floating_ips.create()
     logging.debug("IP %s" % ip.ip)
   
-    instance = nt.servers.create(name='cloud script disposable vm', image=image.id, flavor=flavor.id, key_name=KEY_NAME)
+    instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=KEY_NAME)
     logging.debug("Instance %s" % instance.id)
   
     while True:
@@ -110,6 +111,7 @@ if __name__ == '__main__':
   parser.add_argument('--debug', '-d', action='store_true')
   parser.add_argument('--image', '-i', default=IMAGE)
   parser.add_argument('--flavor', '-f', default=FLAVOR)
+  parser.add_argument('--name', '-n', default=NAME)
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
