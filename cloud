@@ -54,7 +54,7 @@ def main(args):
     image = filter(lambda im: im.name == args.image, nt.images.list())[0]
     flavor = nt.flavors.find(name=args.flavor)
   
-    ip = nt.floating_ips.create('public')
+    ip = nt.floating_ips.create()
     logging.debug("IP %s" % ip.ip)
   
     instance = nt.servers.create(name='cloud script disposable vm', image=image.id, flavor=flavor.id, key_name=KEY_NAME)
