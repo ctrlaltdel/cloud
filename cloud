@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# cloud - an easy to use tool for spawing disposable VM on an Openstack
+# cloud - an easy to use tool for spawning disposable VM on an Openstack
 #         cloud
 #
 # Francois Deppierraz <francois.deppierraz@nimag.net>
