@@ -87,24 +87,28 @@ def main(args):
 
     if args.script:
       scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ip.ip)])
-      ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && /tmp/script'])
+      if args.root:
+        ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && sudo /tmp/script'])
+      else:
+        ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && /tmp/script'])
     else:
       ssh(['-t', '%s@%s' % (USER, ip.ip)])
 
   finally:
-    logging.debug("Cleanup...")
+    if not args.permanent:
+      logging.debug("Cleanup...")
+
+      try:
+        instance.delete()
+        logging.debug("Instance deleted")
+      except:
+        pass
   
-    try:
-      instance.delete()
-      logging.debug("Instance deleted")
-    except:
-      pass
-  
-    try:
-      ip.delete()
-      logging.debug("IP deleted")
-    except:
-      pass
+      try:
+        ip.delete()
+        logging.debug("IP deleted")
+      except:
+        pass
 
 def usage():
   print("Usage: %s [script]" % sys.argv[0])
@@ -118,6 +122,8 @@ if __name__ == '__main__':
   parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('--name', '-n', default=NAME)
   parser.add_argument('--net')
+  parser.add_argument('--permanent', '-p', action='store_true')
+  parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
