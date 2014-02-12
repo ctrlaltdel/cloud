@@ -52,7 +52,12 @@ def main(args):
     from novaclient.v1_1 import client
     nt = client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
   
-    image = filter(lambda im: args.image.lower() in im.name.lower(), nt.images.list())[0]
+    try:
+      image = filter(lambda im: args.image.lower() in im.name.lower(), nt.images.list())[0]
+    except IndexError:
+      logging.error("Image %s not found!" % args.image.lower())
+      sys.exit(1)
+    
     flavor = nt.flavors.find(name=args.flavor)
   
     ip = nt.floating_ips.create()
