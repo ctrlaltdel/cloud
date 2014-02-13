@@ -60,9 +60,6 @@ def main(args):
     
     flavor = nt.flavors.find(name=args.flavor)
   
-    ip = nt.floating_ips.create()
-    logging.debug("IP %s" % ip.ip)
-
     if args.net:
       nics = [{'net-id': nt.networks.find(label=args.net).id}]
       instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=KEY_NAME, nics=nics)
@@ -80,24 +77,32 @@ def main(args):
         break
       else:
         time.sleep(1)
-    instance.add_floating_ip(ip)
+
+    if args.net:
+      ssh_ip = instance.networks[args.net][0]
+    else:
+      ip = nt.floating_ips.create()
+      logging.debug("IP %s" % ip.ip)
+      instance.add_floating_ip(ip)
+      ssh_ip = ip.ip
+
     instance.add_security_group(SEC_GROUP)
   
     while True:
-      res = ssh(['%s@%s' % (USER, ip.ip), 'echo'])
+      res = ssh(['%s@%s' % (USER, ssh_ip), 'echo'])
       if res == 0:
         break
       else:
         time.sleep(5)
 
     if args.script:
-      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ip.ip)])
+      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ssh_ip)])
       if args.root:
-        ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && sudo /tmp/script'])
+        ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && sudo /tmp/script'])
       else:
-        ssh(['-t', '%s@%s' % (USER, ip.ip), 'chmod +x /tmp/script && /tmp/script'])
+        ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
     else:
-      ssh(['-t', '%s@%s' % (USER, ip.ip)])
+      ssh(['-t', '%s@%s' % (USER, ssh_ip)])
 
   finally:
     if not args.permanent:
