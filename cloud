@@ -16,7 +16,7 @@ import tempfile
 import logging
 import argparse
 
-IMAGE     = 'raring-server-cloudimg-amd64'
+IMAGE     = 'trusty-server-cloudimg-amd64'
 USER      = 'ubuntu'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
