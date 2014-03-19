@@ -96,12 +96,17 @@ def main(args):
         time.sleep(5)
 
     if args.script:
+      logging.debug("Executing user supplied script: %s", args.script)
       scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ssh_ip)])
       if args.root:
         ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && sudo /tmp/script'])
       else:
         ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
+    elif args.command:
+      logging.debug("Executing user supplied command: %s", args.command)
+      ssh(['-t', '%s@%s' % (USER, ssh_ip), args.command])
     else:
+      logging.debug("Executing interactive shell")
       ssh(['-t', '%s@%s' % (USER, ssh_ip)])
 
   finally:
@@ -134,6 +139,7 @@ if __name__ == '__main__':
   parser.add_argument('--net')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
+  parser.add_argument('--command', '-c')
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
