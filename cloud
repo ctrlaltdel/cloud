@@ -62,9 +62,9 @@ def main(args):
   
     if args.net:
       nics = [{'net-id': nt.networks.find(label=args.net).id}]
-      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=KEY_NAME, nics=nics)
+      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=args.key_name, nics=nics)
     else:
-      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=KEY_NAME)
+      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=args.key_name)
 
     logging.debug("Instance %s" % instance.id)
   
@@ -140,6 +140,7 @@ if __name__ == '__main__':
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
+  parser.add_argument('--key-name', '-k', default=KEY_NAME)
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
