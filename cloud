@@ -15,6 +15,7 @@ import pickle
 import tempfile
 import logging
 import argparse
+import ipaddr
 
 IMAGE     = 'trusty-server-cloudimg-amd64'
 USER      = 'ubuntu'
@@ -44,6 +45,18 @@ def ssh(args):
 def scp(args):
   logging.debug("scp" + repr(args))
   return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
+
+def get_global_ip(nt, instance):
+  for net in instance.addresses:
+    for address in instance.addresses[net]:
+      ip = address['addr']
+      if ipaddr.IPv4Address(ip).is_private:
+        ip = nt.floating_ips.create()
+        logging.debug("Floating IP %s" % ip.ip)
+        instance.add_floating_ip(ip)
+        return ip.ip
+      else:
+        return ip
 
 def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
@@ -78,13 +91,7 @@ def main(args):
       else:
         time.sleep(1)
 
-    if args.net:
-      ssh_ip = instance.networks[args.net][0]
-    else:
-      ip = nt.floating_ips.create()
-      logging.debug("IP %s" % ip.ip)
-      instance.add_floating_ip(ip)
-      ssh_ip = ip.ip
+    ssh_ip = get_global_ip(nt, instance)
 
     instance.add_security_group(SEC_GROUP)
   
@@ -136,7 +143,7 @@ if __name__ == '__main__':
   parser.add_argument('--image', '-i', default=IMAGE)
   parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('--name', '-n', default=NAME)
-  parser.add_argument('--net')
+  parser.add_argument('--net', default='default')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
