@@ -47,16 +47,18 @@ def scp(args):
   return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
 def get_global_ip(nt, instance):
+  logging.debug("Instance addresses: %s", instance.addresses)
   for net in instance.addresses:
     for address in instance.addresses[net]:
       ip = address['addr']
-      if ipaddr.IPv4Address(ip).is_private:
-        ip = nt.floating_ips.create()
-        logging.debug("Floating IP %s" % ip.ip)
-        instance.add_floating_ip(ip)
-        return ip.ip
-      else:
+      if not ipaddr.IPv4Address(ip).is_private:
+        logging.debug("Found global IP address: %s", ip)
         return ip
+
+  ip = nt.floating_ips.create()
+  logging.debug("Floating IP %s" % ip.ip)
+  instance.add_floating_ip(ip)
+  return ip.ip
 
 def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
@@ -87,11 +89,13 @@ def main(args):
       if instance.status == 'ERROR':
         raise Exception('Instance creation failure')
       if instance.addresses != {}:
+        logging.debug("IP addresses present")
         break
       else:
         time.sleep(1)
 
     ssh_ip = get_global_ip(nt, instance)
+    logging.debug("Globallly reachable IP: %s", ssh_ip)
 
     instance.add_security_group(SEC_GROUP)
   
