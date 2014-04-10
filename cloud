@@ -80,12 +80,28 @@ def main(args):
     else:
       nics = None
 
+    if args.volume:
+      logging.debug("Boot from volume based on image %s of size %d GB", image.id, args.volume_size)
+      bdm = [{
+        'uuid': image.id,
+        'source_type': 'image',
+        'destination_type': 'volume',
+        'delete_on_termination': True,
+        'volume_size': args.volume_size,
+        'boot_index': 0
+      }]
+      image = None
+    else:
+      bdm = None
+      image = image.id
+
     instance = nt.servers.create(
       name=args.name,
-      image=image.id,
+      image=image,
       flavor=flavor.id,
       key_name=args.key_name,
-      nics=nics
+      nics=nics,
+      block_device_mapping_v2 = bdm
     )
 
     logging.debug("Instance %s" % instance.id)
@@ -159,6 +175,8 @@ if __name__ == '__main__':
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
   parser.add_argument('--key-name', '-k', default=KEY_NAME)
+  parser.add_argument('--volume', '-v', action='store_true')
+  parser.add_argument('--volume-size', '-s', type=int, default=10)
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
