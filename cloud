@@ -77,9 +77,16 @@ def main(args):
   
     if args.net:
       nics = [{'net-id': nt.networks.find(label=args.net).id}]
-      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=args.key_name, nics=nics)
     else:
-      instance = nt.servers.create(name=args.name, image=image.id, flavor=flavor.id, key_name=args.key_name)
+      nics = None
+
+    instance = nt.servers.create(
+      name=args.name,
+      image=image.id,
+      flavor=flavor.id,
+      key_name=args.key_name,
+      nics=nics
+    )
 
     logging.debug("Instance %s" % instance.id)
   
