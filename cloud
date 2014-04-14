@@ -25,6 +25,7 @@ SEC_GROUP = 'all'
 NAME      = 'cloud-script-disposable-vm'
 
 KNOWN_HOSTS = tempfile.NamedTemporaryFile()
+CLEANUPS = []
 
 def setup_environment():
   if not 'OS_PASSWORD' in os.environ:
@@ -56,6 +57,7 @@ def get_global_ip(nt, instance):
         return ip
 
   ip = nt.floating_ips.create()
+  CLEANUPS.append(ip)
   logging.debug("Floating IP %s" % ip.ip)
   instance.add_floating_ip(ip)
   return ip.ip
@@ -103,6 +105,7 @@ def main(args):
       nics=nics,
       block_device_mapping_v2 = bdm
     )
+    CLEANUPS.append(instance)
 
     logging.debug("Instance %s" % instance.id)
   
@@ -147,17 +150,9 @@ def main(args):
     if not args.permanent:
       logging.debug("Cleanup...")
 
-      try:
-        instance.delete()
-        logging.debug("Instance deleted")
-      except:
-        pass
-  
-      try:
-        ip.delete()
-        logging.debug("IP deleted")
-      except:
-        pass
+      for cleanup in CLEANUPS:
+        cleanup.delete()
+        logging.debug("%s deleted", cleanup)
 
 def usage():
   print("Usage: %s [script]" % sys.argv[0])
