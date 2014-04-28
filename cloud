@@ -18,7 +18,6 @@ import argparse
 import ipaddr
 
 IMAGE     = 'trusty-server-cloudimg-amd64'
-USER      = 'ubuntu'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
 SEC_GROUP = 'all'
@@ -126,7 +125,7 @@ def main(args):
     instance.add_security_group(SEC_GROUP)
   
     while True:
-      res = ssh(['%s@%s' % (USER, ssh_ip), 'echo'])
+      res = ssh(['%s@%s' % (args.user, ssh_ip), 'echo'])
       if res == 0:
         break
       else:
@@ -134,17 +133,17 @@ def main(args):
 
     if args.script:
       logging.debug("Executing user supplied script: %s", args.script)
-      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (USER, ssh_ip)])
+      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, ssh_ip)])
       if args.root:
-        ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && sudo /tmp/script'])
+        ssh(['-t', '%s@%s' % (args.user, ssh_ip), 'chmod +x /tmp/script && sudo /tmp/script'])
       else:
-        ssh(['-t', '%s@%s' % (USER, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
+        ssh(['-t', '%s@%s' % (args.user, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
     elif args.command:
       logging.debug("Executing user supplied command: %s", args.command)
-      ssh(['-t', '%s@%s' % (USER, ssh_ip), args.command])
+      ssh(['-t', '%s@%s' % (args.user, ssh_ip), args.command])
     else:
       logging.debug("Executing interactive shell")
-      ssh(['-t', '%s@%s' % (USER, ssh_ip)])
+      ssh(['-t', '%s@%s' % (args.user, ssh_ip)])
 
   finally:
     if not args.permanent:
@@ -172,6 +171,7 @@ if __name__ == '__main__':
   parser.add_argument('--key-name', '-k', default=KEY_NAME)
   parser.add_argument('--volume', '-v', action='store_true')
   parser.add_argument('--volume-size', '-s', type=int, default=10)
+  parser.add_argument('--user', '-u', default='ubuntu')
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
