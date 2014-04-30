@@ -159,7 +159,7 @@ def usage():
 if __name__ == '__main__':
   global DEBUG
 
-  parser = argparse.ArgumentParser(description='Easy to use tool for spawing disposable VM on an Openstack')
+  parser = argparse.ArgumentParser(description='Easy to use tool for spawning disposable VM on an Openstack')
   parser.add_argument('--debug', '-d', action='store_true')
   parser.add_argument('--image', '-i', default=IMAGE)
   parser.add_argument('--flavor', '-f', default=FLAVOR)
