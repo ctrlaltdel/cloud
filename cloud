@@ -76,7 +76,11 @@ def main(args):
     flavor = nt.flavors.find(name=args.flavor)
   
     if args.net:
-      nics = [{'net-id': nt.networks.find(label=args.net).id}]
+      try:
+        nics = [{'net-id': nt.networks.find(label=args.net).id}]
+      except novaclient.exceptions.NotFound:
+        print "Network %s not found" % args.net
+        sys.exit(1)
     else:
       nics = None
 
