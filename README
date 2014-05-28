@@ -4,9 +4,19 @@ CLOUD
 Installation
 ------------
 
-* pip install ipAddr
-* Download openrc file to your home
+* Install dependencies
+
+    sudo pip install ipaddr
+    sudo apt-get install python-novaclient
+
+* Download openrc file to your computer
 ** Go to Access & Security > API Access
 ** Click Download OpenStack RC File
-** Copy the file to ~/.openrc
+
+Usage
+-----
+
+* Source openrc file
+* Run the script without argument to launch a VM !
+* ./cloud -h # for help
 
