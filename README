@@ -1,0 +1,12 @@
+CLOUD
+=====
+
+Installation
+------------
+
+* pip install ipAddr
+* Download openrc file to your home
+** Go to Access & Security > API Access
+** Click Download OpenStack RC File
+** Copy the file to ~/.openrc
+
