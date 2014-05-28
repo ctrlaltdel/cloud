@@ -16,6 +16,9 @@ import tempfile
 import logging
 import argparse
 import ipaddr
+from IPython import embed
+import novaclient
+import novaclient.v1_1 as nv
 
 IMAGE     = 'trusty-server-cloudimg-amd64'
 FLAVOR    = 'm1.small'
@@ -64,8 +67,7 @@ def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
   try:
-    from novaclient.v1_1 import client
-    nt = client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
+    nt = nv.client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
   
     try:
       image = filter(lambda im: args.image.lower() in im.name.lower(), nt.images.list())[0]
@@ -125,8 +127,17 @@ def main(args):
     ssh_ip = get_global_ip(nt, instance)
     logging.debug("Globally reachable IP: %s", ssh_ip)
 
-    instance.add_security_group(args.secgroup)
-  
+    try:
+      instance.add_security_group(args.secgroup)
+    except novaclient.exceptions.NotFound:
+      # default security group not found, create it
+      if args.secgroup == 'all':
+        secgroup = nt.security_groups.create('all', 'The world famous any any rule')
+        nt.security_group_rules.create(secgroup.id, 'icmp', '-1', '-1', '0.0.0.0/0') 
+        nt.security_group_rules.create(secgroup.id, 'udp', '1', '65535', '0.0.0.0/0') 
+        nt.security_group_rules.create(secgroup.id, 'tcp', '1', '65535', '0.0.0.0/0') 
+        instance.add_security_group(secgroup.id)
+
     while True:
       res = ssh(['%s@%s' % (args.user, ssh_ip), 'echo'])
       if res == 0:
