@@ -20,7 +20,6 @@ import ipaddr
 IMAGE     = 'trusty-server-cloudimg-amd64'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
-SEC_GROUP = 'all'
 NAME      = 'cloud-script-disposable-vm'
 
 KNOWN_HOSTS = tempfile.NamedTemporaryFile()
@@ -120,9 +119,9 @@ def main(args):
         time.sleep(1)
 
     ssh_ip = get_global_ip(nt, instance)
-    logging.debug("Globallly reachable IP: %s", ssh_ip)
+    logging.debug("Globally reachable IP: %s", ssh_ip)
 
-    instance.add_security_group(SEC_GROUP)
+    instance.add_security_group(args.secgroup)
   
     while True:
       res = ssh(['%s@%s' % (args.user, ssh_ip), 'echo'])
@@ -172,6 +171,7 @@ if __name__ == '__main__':
   parser.add_argument('--volume', '-v', action='store_true')
   parser.add_argument('--volume-size', '-s', type=int, default=10)
   parser.add_argument('--user', '-u', default='ubuntu')
+  parser.add_argument('--secgroup', default='all')
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
