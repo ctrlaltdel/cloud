@@ -84,7 +84,13 @@ def main(args):
         print "Network %s not found" % args.net
         sys.exit(1)
     else:
-      nics = None
+      nets = nt.networks.list()
+      assert(len(nets) > 0)
+      if len(nets) == 1:
+        logging.debug("Connecting instance to the only available network %s", nets[0])
+        nics = [{'net-id': nets[0].id}]
+      else:
+        raise Exception("Multiple networks found, please specify which one the instance should use with --net")
 
     if args.volume:
       logging.debug("Boot from volume based on image %s of size %d GB", image.id, args.volume_size)
@@ -178,7 +184,7 @@ if __name__ == '__main__':
   parser.add_argument('--image', '-i', default=IMAGE)
   parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('--name', '-n', default=NAME)
-  parser.add_argument('--net', default='default')
+  parser.add_argument('--net')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
