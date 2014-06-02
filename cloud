@@ -69,6 +69,23 @@ def get_flavor(nt, name):
       return flavor
   raise Exception('No flavor %s found' % flavor)
 
+def get_nics(nt, net):
+  if net:
+    try:
+      nics = [{'net-id': nt.networks.find(label=net).id}]
+    except novaclient.exceptions.NotFound:
+      raise Exception("Network %s not found" % net)
+  else:
+    nets = nt.networks.list()
+    assert(len(nets) > 0)
+    if len(nets) == 1:
+      logging.debug("Connecting instance to the only available network %s", nets[0])
+      nics = [{'net-id': nets[0].id}]
+    else:
+      raise Exception("Multiple networks found, please specify which one the instance should use with --net")
+
+  return nics
+
 def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
@@ -82,21 +99,7 @@ def main(args):
       sys.exit(1)
     
     flavor = get_flavor(nt, args.flavor)
-
-    if args.net:
-      try:
-        nics = [{'net-id': nt.networks.find(label=args.net).id}]
-      except novaclient.exceptions.NotFound:
-        print "Network %s not found" % args.net
-        sys.exit(1)
-    else:
-      nets = nt.networks.list()
-      assert(len(nets) > 0)
-      if len(nets) == 1:
-        logging.debug("Connecting instance to the only available network %s", nets[0])
-        nics = [{'net-id': nets[0].id}]
-      else:
-        raise Exception("Multiple networks found, please specify which one the instance should use with --net")
+    nics = get_nics(nt, args.net)
 
     if args.volume:
       logging.debug("Boot from volume based on image %s of size %d GB", image.id, args.volume_size)
