@@ -63,6 +63,12 @@ def get_global_ip(nt, instance):
   instance.add_floating_ip(ip)
   return ip.ip
 
+def get_flavor(nt, name):
+  for flavor in nt.flavors.list():
+    if name in flavor.name:
+      return flavor
+  raise Exception('No flavor %s found' % flavor)
+
 def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
@@ -75,8 +81,8 @@ def main(args):
       logging.error("Image %s not found!" % args.image.lower())
       sys.exit(1)
     
-    flavor = nt.flavors.find(name=args.flavor)
-  
+    flavor = get_flavor(nt, args.flavor)
+
     if args.net:
       try:
         nics = [{'net-id': nt.networks.find(label=args.net).id}]
