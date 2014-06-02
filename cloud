@@ -53,7 +53,7 @@ def get_global_ip(nt, instance):
   for net in instance.addresses:
     for address in instance.addresses[net]:
       ip = address['addr']
-      if not ipaddr.IPv4Address(ip).is_private:
+      if not ipaddr.IPAddress(ip).is_private:
         logging.debug("Found global IP address: %s", ip)
         return ip
 
@@ -76,7 +76,11 @@ def get_nics(nt, net):
     except novaclient.exceptions.NotFound:
       raise Exception("Network %s not found" % net)
   else:
-    nets = nt.networks.list()
+    try:
+      nets = nt.networks.list()
+    except novaclient.exceptions.NotFound: # Rackspace cloud doesn't expose networks this way
+      return None
+
     assert(len(nets) > 0)
     if len(nets) == 1:
       logging.debug("Connecting instance to the only available network %s", nets[0])
@@ -144,14 +148,19 @@ def main(args):
 
     try:
       instance.add_security_group(args.secgroup)
+
+    # default security group not found, create it
     except novaclient.exceptions.NotFound:
-      # default security group not found, create it
       if args.secgroup == 'all':
         secgroup = nt.security_groups.create('all', 'The world famous any any rule')
         nt.security_group_rules.create(secgroup.id, 'icmp', '-1', '-1', '0.0.0.0/0') 
         nt.security_group_rules.create(secgroup.id, 'udp', '1', '65535', '0.0.0.0/0') 
         nt.security_group_rules.create(secgroup.id, 'tcp', '1', '65535', '0.0.0.0/0') 
         instance.add_security_group(secgroup.id)
+
+    # API not supported by rackspace cloud
+    except novaclient.exceptions.BadRequest:
+      pass
 
     while True:
       res = ssh(['%s@%s' % (args.user, ssh_ip), 'echo'])
