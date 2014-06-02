@@ -1,6 +1,8 @@
 CLOUD
 =====
 
+cloud - an easy to use tool for spawning disposable VM on an Openstack cloud
+
 Installation
 ------------
 
