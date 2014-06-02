@@ -90,6 +90,24 @@ def get_nics(nt, net):
 
   return nics
 
+def get_bdm(nt, args, image):
+  if args.volume:
+    logging.debug("Boot from volume based on image %s of size %d GB", image.id, args.volume_size)
+    bdm = [{
+      'uuid': image.id,
+      'source_type': 'image',
+      'destination_type': 'volume',
+      'delete_on_termination': True,
+      'volume_size': args.volume_size,
+      'boot_index': 0
+    }]
+    image = None
+  else:
+    bdm = None
+    image = image.id
+
+  return bdm, image
+
 def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
@@ -104,21 +122,7 @@ def main(args):
     
     flavor = get_flavor(nt, args.flavor)
     nics = get_nics(nt, args.net)
-
-    if args.volume:
-      logging.debug("Boot from volume based on image %s of size %d GB", image.id, args.volume_size)
-      bdm = [{
-        'uuid': image.id,
-        'source_type': 'image',
-        'destination_type': 'volume',
-        'delete_on_termination': True,
-        'volume_size': args.volume_size,
-        'boot_index': 0
-      }]
-      image = None
-    else:
-      bdm = None
-      image = image.id
+    bdm, image = get_bdm(nt, args, image)
 
     instance = nt.servers.create(
       name=args.name,
