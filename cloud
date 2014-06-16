@@ -18,7 +18,10 @@ import argparse
 import ipaddr
 from IPython import embed
 import novaclient
-import novaclient.v1_1 as nv
+from novaclient.v1_1 import client as nova_client
+from neutronclient.v2_0 import client as neutron_client
+from neutronclient.common.exceptions import EndpointNotFound
+from keystoneclient.v2_0 import client as keystone_client
 
 IMAGE     = 'trusty-server-cloudimg-amd64'
 FLAVOR    = 'm1.small'
@@ -69,24 +72,40 @@ def get_flavor(nt, name):
       return flavor
   raise Exception('No flavor %s found' % flavor)
 
-def get_nics(nt, net):
+def get_nics(keystone, net):
+  neutron = neutron_client.Client(
+    username=os.environ['OS_USERNAME'],
+    password=os.environ['OS_PASSWORD'],
+    tenant_name=os.environ['OS_TENANT_NAME'],
+    auth_url=os.environ['OS_AUTH_URL']
+  )
+
+  try:
+    neutron.list_networks()
+  except EndpointNotFound:
+    # No neutron support found, let's hope nova will handle the network
+    # automatically
+    return None
+
   if net:
+    nets = neutron.list_networks(name=net)['networks']
+
     try:
-      nics = [{'net-id': nt.networks.find(label=net).id}]
+      nics = [{'net-id': nets[0]['id']}]
     except novaclient.exceptions.NotFound:
       raise Exception("Network %s not found" % net)
   else:
-    try:
-      nets = nt.networks.list()
-    except novaclient.exceptions.NotFound: # Rackspace cloud doesn't expose networks this way
-      return None
+    # From horizon/openstack_dashboard/api/neutron.py network_list_for_tenant()
+    nets = neutron.list_networks(tenant_id=keystone.tenant_id, shared=False)['networks']
+    nets += neutron.list_networks(shared=True)['networks']
 
     assert(len(nets) > 0)
     if len(nets) == 1:
-      logging.debug("Connecting instance to the only available network %s", nets[0])
-      nics = [{'net-id': nets[0].id}]
+      net = nets[0]['id']
+      logging.debug("Connecting instance to the only available network %s", net)
+      nics = [{'net-id': net}]
     else:
-      raise Exception("Multiple networks found, please specify which one the instance should use with --net")
+      raise Exception("Multiple networks found (%s), please specify which one the instance should use with --net" % [net['name'] for net in nets])
 
   return nics
 
@@ -112,8 +131,15 @@ def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
   try:
-    nt = nv.client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
-  
+    nt = nova_client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
+
+    keystone = keystone_client.Client(
+      username=os.environ['OS_USERNAME'],
+      password=os.environ['OS_PASSWORD'],
+      tenant_name=os.environ['OS_TENANT_NAME'],
+      auth_url=os.environ['OS_AUTH_URL']
+    )
+
     try:
       image = filter(lambda im: args.image.lower() in im.name.lower(), nt.images.list())[0]
     except IndexError:
@@ -121,7 +147,7 @@ def main(args):
       sys.exit(1)
     
     flavor = get_flavor(nt, args.flavor)
-    nics = get_nics(nt, args.net)
+    nics = get_nics(keystone, args.net)
     bdm, image = get_bdm(nt, args, image)
 
     instance = nt.servers.create(
