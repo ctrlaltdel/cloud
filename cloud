@@ -16,7 +16,6 @@ import tempfile
 import logging
 import argparse
 import ipaddr
-from IPython import embed
 import novaclient
 from novaclient.v1_1 import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
