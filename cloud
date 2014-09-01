@@ -59,7 +59,8 @@ def get_global_ip(nt, instance):
         logging.debug("Found global IP address: %s", ip)
         return ip
 
-  ip = nt.floating_ips.create()
+  pool = nt.floating_ip_pools.list()[0]
+  ip = nt.floating_ips.create(pool.name)
   CLEANUPS.append(ip)
   logging.debug("Floating IP %s" % ip.ip)
   instance.add_floating_ip(ip)
