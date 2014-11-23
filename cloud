@@ -22,6 +22,7 @@ from novaclient.v1_1 import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
 from neutronclient.common.exceptions import EndpointNotFound
 from keystoneclient.v2_0 import client as keystone_client
+from cinderclient.v1 import client as cinder_client
 
 IMAGE     = 'ubuntu|trusty'
 FLAVOR    = 'm1.small'
@@ -56,6 +57,7 @@ def get_global_ip(nt, instance):
   for net in instance.addresses:
     for address in instance.addresses[net]:
       ip = address['addr']
+
       if not ipaddr.IPAddress(ip).is_private:
         logging.debug("Found global IP address: %s", ip)
         return ip
@@ -121,13 +123,38 @@ def get_bdm(nt, args):
   image_id = find_image(nt, args)
 
   if args.volume:
-    logging.debug("Boot from volume based on image %s of size %d GB", image_id, args.volume_size)
+
+    cinder = cinder_client.Client(
+      os.environ['OS_USERNAME'],
+      os.environ['OS_PASSWORD'],
+      os.environ['OS_TENANT_NAME'],
+      os.environ['OS_AUTH_URL']
+    )
+
+    logging.debug("Create a new volume of type %s based on image %s of size %d GB" % (args.volume_type, image_id, args.volume_size))
+    volume = cinder.volumes.create(size=args.volume_size, volume_type=args.volume_type, imageRef=image_id)
+    CLEANUPS.append(volume)
+
+    logging.debug("Volume %s created" % volume.id)
+
+    # Wait for volume creation
+    while True:
+      volume.get()
+
+      if volume.status == 'available':
+        break
+      if volume.status == 'error':
+        raise Exception('Volume creation failed')
+      else:
+        logging.debug("Volume status: %s" % (volume.status))
+        time.sleep(10)
+
+    logging.debug("Boot from volume %s", volume)
     bdm = [{
-      'uuid': image_id,
-      'source_type': 'image',
+      'uuid': volume.id,
+      'source_type': 'volume',
       'destination_type': 'volume',
       'delete_on_termination': True,
-      'volume_size': args.volume_size,
       'boot_index': 0
     }]
     image = None
@@ -162,13 +189,13 @@ def main(args):
       nics=nics,
       block_device_mapping_v2 = bdm
     )
-    CLEANUPS.append(instance)
+    CLEANUPS.insert(0, instance)
 
     logging.debug("Instance %s" % instance.id)
   
     while True:
-      instance = nt.servers.get(instance.id)
-      logging.debug(instance.status)
+      instance.get()
+      logging.debug("Instance status: %s" % instance.status)
       if instance.status == 'ERROR':
         raise Exception('Instance creation failure')
       if instance.addresses != {}:
@@ -243,6 +270,7 @@ if __name__ == '__main__':
   parser.add_argument('--key-name', '-k', default=KEY_NAME)
   parser.add_argument('--volume', '-v', action='store_true')
   parser.add_argument('--volume-size', '-s', type=int, default=10)
+  parser.add_argument('--volume-type', '-t')
   parser.add_argument('--user', '-u', default='ubuntu')
   parser.add_argument('--secgroup', default='all')
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
