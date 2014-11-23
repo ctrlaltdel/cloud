@@ -62,6 +62,9 @@ def get_global_ip(nt, instance):
         logging.debug("Found global IP address: %s", ip)
         return ip
 
+  if args.no_floating_ip:
+    return ip
+
   pool = nt.floating_ip_pools.list()[0]
   ip = nt.floating_ips.create(pool.name)
   CLEANUPS.append(ip)
@@ -264,6 +267,7 @@ if __name__ == '__main__':
   parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('--name', '-n', default=NAME)
   parser.add_argument('--net')
+  parser.add_argument('--no-floating-ip', action='store_true')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
