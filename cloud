@@ -88,7 +88,7 @@ def get_nics(keystone, net):
 
   try:
     neutron.list_networks()
-  except EndpointNotFound:
+  except:
     # No neutron support found, let's hope nova will handle the network
     # automatically
     return None
@@ -252,8 +252,11 @@ def main(args):
       logging.debug("Cleanup...")
 
       for cleanup in CLEANUPS:
-        cleanup.delete()
-        logging.debug("%s deleted", cleanup)
+        try:
+          cleanup.delete()
+          logging.debug("%s deleted", cleanup)
+        except:
+          logging.warn("Deletion of resource %s failed", cleanup)
 
 def usage():
   print("Usage: %s [script]" % sys.argv[0])
