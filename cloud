@@ -88,9 +88,9 @@ def get_nics(keystone, net):
 
   try:
     neutron.list_networks()
-  except:
-    # No neutron support found, let's hope nova will handle the network
-    # automatically
+  except Exception, e:
+    logging.warn("No neutron support found, let's hope nova will handle the network")
+    logging.exception(e)
     return None
 
   if net:
