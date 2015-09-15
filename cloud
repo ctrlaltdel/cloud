@@ -20,10 +20,11 @@ import ipaddr
 from os import environ as env
 from getpass import getpass
 import novaclient
-from novaclient.v1_1 import client as nova_client
-from neutronclient.v2_0 import client as neutron_client
-from neutronclient.common.exceptions import EndpointNotFound
+from keystoneclient.auth.identity import v2
+from keystoneclient import session
 from keystoneclient.v2_0 import client as keystone_client
+from novaclient import client as nova_client
+from neutronclient.v2_0 import client as neutron_client
 from cinderclient.v1 import client as cinder_client
 
 IMAGE     = 'ubuntu|trusty'
@@ -54,7 +55,7 @@ def scp(args):
   logging.debug("scp" + repr(args))
   return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
-def get_global_ip(nt, instance):
+def get_global_ip(nova, instance):
   logging.debug("Instance addresses: %s", instance.addresses)
   for net in instance.addresses:
     for address in instance.addresses[net]:
@@ -67,27 +68,20 @@ def get_global_ip(nt, instance):
   if args.no_floating_ip:
     return ip
 
-  pool = nt.floating_ip_pools.list()[0]
-  ip = nt.floating_ips.create(pool.name)
+  pool = nova.floating_ip_pools.list()[0]
+  ip = nova.floating_ips.create(pool.name)
   CLEANUPS.append(ip)
   logging.debug("Floating IP %s" % ip.ip)
   instance.add_floating_ip(ip)
   return ip.ip
 
-def get_flavor(nt, name):
-  for flavor in nt.flavors.list():
+def get_flavor(nova, name):
+  for flavor in nova.flavors.list():
     if name in flavor.name:
       return flavor
   raise Exception('No flavor %s found' % flavor)
 
-def get_nics(keystone, net):
-  neutron = neutron_client.Client(
-    username=os.environ['OS_USERNAME'],
-    password=os.environ['OS_PASSWORD'],
-    tenant_name=os.environ['OS_TENANT_NAME'],
-    auth_url=os.environ['OS_AUTH_URL']
-  )
-
+def get_nics(neutron, keystone, net):
   try:
     neutron.list_networks()
   except Exception, e:
@@ -117,15 +111,15 @@ def get_nics(keystone, net):
 
   return nics
 
-def find_image(nt, args):
-  for image in nt.images.list():
+def find_image(nova, args):
+  for image in nova.images.list():
     if image.name and re.match(args.image, image.name, re.IGNORECASE):
       return image.id
 
   raise Exception("Image %s not found!" % args.image)
 
-def get_bdm(nt, args):
-  image_id = find_image(nt, args)
+def get_bdm(nova, args):
+  image_id = find_image(nova, args)
 
   if args.volume:
 
@@ -173,20 +167,22 @@ def main(args):
   logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
   
   try:
-    nt = nova_client.Client(os.environ['OS_USERNAME'], os.environ['OS_PASSWORD'], os.environ['OS_TENANT_NAME'], os.environ['OS_AUTH_URL'], service_type="compute")
+    auth = v2.Password(
+      auth_url=env['OS_AUTH_URL'],
+      username=env['OS_USERNAME'],
+      password=env['OS_PASSWORD'],
+      tenant_name=env['OS_TENANT_NAME'])
+    sess = session.Session(auth=auth)
 
-    keystone = keystone_client.Client(
-      username=os.environ['OS_USERNAME'],
-      password=os.environ['OS_PASSWORD'],
-      tenant_name=os.environ['OS_TENANT_NAME'],
-      auth_url=os.environ['OS_AUTH_URL']
-    )
+    nova = nova_client.Client('2', session=sess)
+    neutron = neutron_client.Client(session=sess)
+    keystone = keystone_client.Client(session=sess)
 
-    flavor = get_flavor(nt, args.flavor)
-    nics = get_nics(keystone, args.net)
-    bdm, image = get_bdm(nt, args)
+    flavor = get_flavor(nova, args.flavor)
+    nics = get_nics(neutron, keystone, args.net)
+    bdm, image = get_bdm(nova, args)
 
-    instance = nt.servers.create(
+    instance = nova.servers.create(
       name=args.name,
       image=image,
       flavor=flavor.id,
@@ -209,7 +205,7 @@ def main(args):
       else:
         time.sleep(1)
 
-    ssh_ip = get_global_ip(nt, instance)
+    ssh_ip = get_global_ip(nova, instance)
     logging.debug("Globally reachable IP: %s", ssh_ip)
 
     try:
@@ -218,10 +214,10 @@ def main(args):
     # default security group not found, create it
     except novaclient.exceptions.NotFound:
       if args.secgroup == 'all':
-        secgroup = nt.security_groups.create('all', 'The world famous any any rule')
-        nt.security_group_rules.create(secgroup.id, 'icmp', '-1', '-1', '0.0.0.0/0') 
-        nt.security_group_rules.create(secgroup.id, 'udp', '1', '65535', '0.0.0.0/0') 
-        nt.security_group_rules.create(secgroup.id, 'tcp', '1', '65535', '0.0.0.0/0') 
+        secgroup = nova.security_groups.create('all', 'The world famous any any rule')
+        nova.security_group_rules.create(secgroup.id, 'icmp', '-1', '-1', '0.0.0.0/0') 
+        nova.security_group_rules.create(secgroup.id, 'udp', '1', '65535', '0.0.0.0/0') 
+        nova.security_group_rules.create(secgroup.id, 'tcp', '1', '65535', '0.0.0.0/0') 
         instance.add_security_group(secgroup.id)
 
     # API not supported by rackspace cloud
@@ -288,6 +284,8 @@ if __name__ == '__main__':
   if args.debug:
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
+
+    logging.getLogger('iso8601.iso8601').setLevel(logging.WARN)
 
   try:
     setup_environment()
