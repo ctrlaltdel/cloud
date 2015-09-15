@@ -17,6 +17,8 @@ import tempfile
 import logging
 import argparse
 import ipaddr
+from os import environ as env
+from getpass import getpass
 import novaclient
 from novaclient.v1_1 import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
@@ -33,7 +35,7 @@ KNOWN_HOSTS = tempfile.NamedTemporaryFile()
 CLEANUPS = []
 
 def setup_environment():
-  if not 'OS_PASSWORD' in os.environ:
+  if not 'OS_AUTH_URL' in os.environ:
     source = '. ~/.openrc'
     dump = '/usr/bin/python -c "import os,pickle;print pickle.dumps(os.environ)"'
     penv = os.popen('%s && %s' %(source,dump))
@@ -41,8 +43,8 @@ def setup_environment():
     os.environ = env
   
   if not 'OS_PASSWORD' in os.environ:
-    raise Exception('No Openstack environnment variables found!')
-
+    password = getpass("OS Password: ")
+    os.environ['OS_PASSWORD'] = password
 
 def ssh(args):
   logging.debug("ssh " + repr(args))
