@@ -59,9 +59,17 @@ def get_global_ip(nova, instance):
   logging.debug("Instance addresses: %s", instance.addresses)
   for net in instance.addresses:
     for address in instance.addresses[net]:
-      ip = address['addr']
+      ip = ipaddr.IPAddress(address['addr'])
 
-      if not ipaddr.IPAddress(ip).is_private:
+      if not ip.is_private:
+        if args.prefer_ipv4 and ip.version != 4:
+          logging.debug("%s address is not IPv4", ip)
+          continue
+
+        if args.prefer_ipv6 and ip.version != 6:
+          logging.debug("%s address is not IPv6", ip)
+          continue
+
         logging.debug("Found global IP address: %s", ip)
         return ip
 
@@ -278,6 +286,11 @@ if __name__ == '__main__':
   parser.add_argument('--volume-type', '-t')
   parser.add_argument('--user', '-u', default='ubuntu')
   parser.add_argument('--secgroup', default='all')
+
+  group = parser.add_mutually_exclusive_group()
+  group.add_argument('--prefer-ipv4', '-4', action='store_true')
+  group.add_argument('--prefer-ipv6', '-6', action='store_true')
+
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
   args = parser.parse_args()
 
