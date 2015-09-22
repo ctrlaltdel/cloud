@@ -196,7 +196,8 @@ def main(args):
       flavor=flavor.id,
       key_name=args.key_name,
       nics=nics,
-      block_device_mapping_v2 = bdm
+      block_device_mapping_v2 = bdm,
+      availability_zone = args.availability_zone
     )
     CLEANUPS.insert(0, instance)
 
@@ -286,6 +287,7 @@ if __name__ == '__main__':
   parser.add_argument('--volume-type', '-t')
   parser.add_argument('--user', '-u', default='ubuntu')
   parser.add_argument('--secgroup', default='all')
+  parser.add_argument('--availability_zone', '-az')
 
   group = parser.add_mutually_exclusive_group()
   group.add_argument('--prefer-ipv4', '-4', action='store_true')
