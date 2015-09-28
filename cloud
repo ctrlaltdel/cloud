@@ -55,6 +55,19 @@ def scp(args):
   logging.debug("scp" + repr(args))
   return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
+def get_floating_ip_pool(nova):
+  if args.floating_ip_pool:
+    for p in nova.floating_ip_pools.list():
+      logging.debug('Nova floating ip pool: %s', p)
+      if p.name == args.floating_ip_pool:
+        return p
+
+    # No specified pool found
+    raise Exception('Floating IP pool %s not found', args.floating_ip_pool)
+  else:
+    # No specific pool request, let's just return the first one
+    return nova.floating_ip_pools.list()[0]
+
 def get_global_ip(nova, instance):
   logging.debug("Instance addresses: %s", instance.addresses)
   for net in instance.addresses:
@@ -76,7 +89,8 @@ def get_global_ip(nova, instance):
   if args.no_floating_ip:
     return ip
 
-  pool = nova.floating_ip_pools.list()[0]
+  pool = get_floating_ip_pool(nova)
+
   ip = nova.floating_ips.create(pool.name)
   CLEANUPS.append(ip)
   logging.debug("Floating IP %s" % ip.ip)
@@ -278,6 +292,7 @@ if __name__ == '__main__':
   parser.add_argument('--name', '-n', default=NAME)
   parser.add_argument('--net')
   parser.add_argument('--no-floating-ip', action='store_true')
+  parser.add_argument('--floating-ip-pool')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
   parser.add_argument('--command', '-c')
