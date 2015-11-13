@@ -469,7 +469,7 @@ def main(args):
     logging.debug("Instance %s" % instance.id)
   
     while True:
-      instance.get()
+      instance = nova.servers.get(instance.id)
       logging.debug("Instance status: %s" % instance.status)
       if instance.status == 'ERROR':
         raise Exception('Instance creation failure')
