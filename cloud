@@ -354,7 +354,7 @@ def get_flavor(nova, name):
       return flavor
   raise Exception('No flavor %s found' % flavor)
 
-def get_nics(neutron, keystone, net):
+def get_nic(neutron, keystone, net):
   try:
     neutron.list_networks()
   except Exception, e:
@@ -366,7 +366,7 @@ def get_nics(neutron, keystone, net):
     nets = neutron.list_networks(name=net)['networks']
 
     try:
-      nics = [{'net-id': nets[0]['id']}]
+      nic = {'net-id': nets[0]['id']}
     except novaclient.exceptions.NotFound:
       raise Exception("Network %s not found" % net)
   else:
@@ -378,11 +378,11 @@ def get_nics(neutron, keystone, net):
     if len(nets) == 1:
       net = nets[0]['id']
       logging.debug("Connecting instance to the only available network %s", net)
-      nics = [{'net-id': net}]
+      nic = {'net-id': net}
     else:
       raise Exception("Multiple networks found (%s), please specify which one the instance should use with --net" % [net['name'] for net in nets])
 
-  return nics
+  return nic
 
 def find_image(nova, args):
   for image in nova.images.list():
@@ -452,7 +452,10 @@ def main(args):
     keystone = keystone_client.Client(session=sess)
 
     flavor = get_flavor(nova, args.flavor)
-    nics = get_nics(neutron, keystone, args.net)
+    nics = []
+    for net in args.net:
+      nics.append(get_nic(neutron, keystone, net))
+    logging.debug('Nics: %s' % (nics))
     bdm, image = get_bdm(nova, args)
 
     instance = nova.servers.create(
@@ -472,6 +475,7 @@ def main(args):
       instance = nova.servers.get(instance.id)
       logging.debug("Instance status: %s" % instance.status)
       if instance.status == 'ERROR':
+        logging.error("Instance ID: %s" % (instance.id))
         raise Exception('Instance creation failure')
       if instance.addresses != {}:
         logging.debug("IP addresses present")
@@ -527,8 +531,9 @@ def main(args):
         try:
           cleanup.delete()
           logging.debug("%s deleted", cleanup)
-        except:
+        except Exception, e:
           logging.warn("Deletion of resource %s failed", cleanup)
+          logging.exception(e)
 
 def get_hostname():
   adjective = random.choice(ADJECTIVES.replace('\n', ' ').strip().split(' '))
@@ -547,7 +552,7 @@ if __name__ == '__main__':
   parser.add_argument('--image', '-i', default=IMAGE)
   parser.add_argument('--flavor', '-f', default=FLAVOR)
   parser.add_argument('--name', '-n', default=get_hostname())
-  parser.add_argument('--net')
+  parser.add_argument('--net', action='append')
   parser.add_argument('--no-floating-ip', action='store_true')
   parser.add_argument('--floating-ip-pool')
   parser.add_argument('--permanent', '-p', action='store_true')
