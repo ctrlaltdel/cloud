@@ -28,7 +28,7 @@ from novaclient import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
 from cinderclient.v1 import client as cinder_client
 
-IMAGE     = 'ubuntu|trusty'
+IMAGE     = 'ubuntu|xenial'
 FLAVOR    = 'm1.small'
 KEY_NAME  = os.environ['USER']
 
