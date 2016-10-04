@@ -535,6 +535,11 @@ def main(args, cloud_config):
           cleanup.delete()
           logging.debug("%s deleted", cleanup)
         except Exception, e:
+          # Known openstack bug:
+          # https://bugs.launchpad.net/tempest/+bug/1586931
+          if 'neutronclient.common.exceptions.PortNotFoundClient' in e.message:
+            break
+
           logging.warn("Deletion of resource %s failed", cleanup)
           logging.exception(e)
 
