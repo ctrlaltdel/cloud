@@ -20,6 +20,7 @@ import ipaddr
 from os import environ as env
 from getpass import getpass
 import random
+import os_client_config
 import novaclient
 from keystoneclient.auth.identity import v2
 from keystoneclient import session
@@ -27,6 +28,7 @@ from keystoneclient.v2_0 import client as keystone_client
 from novaclient import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
 from cinderclient.v1 import client as cinder_client
+import keystoneauth1
 
 IMAGE     = 'ubuntu|xenial'
 FLAVOR    = 'm1.small'
@@ -285,7 +287,6 @@ wheel whip whistle wilderness wind window wine wing winter wire wish
 woman women wood wool word work worm wound wren wrench wrist writer
 writing yak yam yard yarn year yoke zebra zephyr zinc zipper zoo"""
 
-
 def setup_environment():
   if not 'OS_AUTH_URL' in os.environ:
     source = '. ~/.openrc'
@@ -365,6 +366,8 @@ def get_nic(neutron, keystone, net):
   if net:
     nets = neutron.list_networks(name=net)['networks']
 
+    logging.debug("Available networks: %s", nets)
+
     try:
       nic = {'net-id': nets[0]['id']}
     except novaclient.exceptions.NotFound:
@@ -436,25 +439,25 @@ def get_bdm(nova, args):
 
   return bdm, image
 
-def main(args):
-  logging.debug("Connecting to Openstack cloud at %s" % (os.environ['OS_AUTH_URL']))
+def main(args, cloud_config):
+  logging.debug("Connecting to Openstack cloud")
   
   try:
-    auth = v2.Password(
-      auth_url=env['OS_AUTH_URL'],
-      username=env['OS_USERNAME'],
-      password=env['OS_PASSWORD'],
-      tenant_name=env['OS_TENANT_NAME'])
-    sess = session.Session(auth=auth)
+    cloud = cloud_config.get_one_cloud(argparse=args)
 
-    nova = nova_client.Client('2', session=sess)
-    neutron = neutron_client.Client(session=sess)
-    keystone = keystone_client.Client(session=sess)
+    nova = cloud.get_legacy_client('compute')
+    neutron = cloud.get_legacy_client('network')
+
+    try:
+      keystone = cloud.get_legacy_client('identity', version=3)
+    except keystoneauth1.exceptions.discovery.VersionNotAvailable:
+      keystone = cloud.get_legacy_client('identity', version=2)
 
     flavor = get_flavor(nova, args.flavor)
     nics = []
-    for net in args.net:
-      nics.append(get_nic(neutron, keystone, net))
+    if args.net:
+      for net in args.net:
+        nics.append(get_nic(neutron, keystone, net))
     logging.debug('Nics: %s' % (nics))
     bdm, image = get_bdm(nova, args)
 
@@ -571,6 +574,9 @@ if __name__ == '__main__':
   group.add_argument('--prefer-ipv6', '-6', action='store_true')
 
   parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
+
+  cloud_config = os_client_config.OpenStackConfig()
+  cloud_config.register_argparse_arguments(parser, sys.argv)
   args = parser.parse_args()
 
   if args.debug:
@@ -581,6 +587,6 @@ if __name__ == '__main__':
 
   try:
     setup_environment()
-    main(args)
+    main(args, cloud_config)
   finally:
     KNOWN_HOSTS.close()
