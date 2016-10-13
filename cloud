@@ -353,7 +353,7 @@ def get_flavor(nova, name):
   for flavor in nova.flavors.list():
     if name in flavor.name:
       return flavor
-  raise Exception('No flavor %s found' % flavor)
+  raise Exception('No flavor %s found' % name)
 
 def get_nic(neutron, keystone, net):
   try:
