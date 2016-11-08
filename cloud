@@ -439,6 +439,14 @@ def get_bdm(nova, args):
 
   return bdm, image
 
+def upload_keypair(nova):
+  key_names = map(lambda k: k.name, nova.keypairs.list())
+
+  if args.key_name not in key_names:
+    with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as f:
+        public_key = f.read()
+        nova.keypairs.create(args.key_name, public_key)
+
 def main(args, cloud_config):
   logging.debug("Connecting to Openstack cloud")
   
@@ -460,6 +468,8 @@ def main(args, cloud_config):
         nics.append(get_nic(neutron, keystone, net))
     logging.debug('Nics: %s' % (nics))
     bdm, image = get_bdm(nova, args)
+
+    upload_keypair(nova)
 
     instance = nova.servers.create(
       name=args.name,
