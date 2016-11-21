@@ -29,6 +29,7 @@ from novaclient import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
 from cinderclient.v1 import client as cinder_client
 import keystoneauth1
+import uuid
 
 IMAGE     = 'ubuntu|xenial'
 FLAVOR    = 'm1.small'
@@ -499,17 +500,16 @@ def main(args, cloud_config):
     ssh_ip = get_global_ip(nova, instance)
     logging.debug("Globally reachable IP: %s", ssh_ip)
 
+    if not args.secgroup:
+      random_uuid = uuid.uuid4()
+      secgroup = nova.security_groups.create('cloud-%s' % random_uuid, 'Auto-generated security group')
+      nova.security_group_rules.create(secgroup.id, 'icmp', '8', '0', '0.0.0.0/0')
+      nova.security_group_rules.create(secgroup.id, 'tcp', '22', '22', '0.0.0.0/0')
+      instance.add_security_group(secgroup.id)
+      CLEANUPS.append(secgroup)
+
     try:
       instance.add_security_group(args.secgroup)
-
-    # default security group not found, create it
-    except novaclient.exceptions.NotFound:
-      if args.secgroup == 'all':
-        secgroup = nova.security_groups.create('all', 'The world famous any any rule')
-        nova.security_group_rules.create(secgroup.id, 'icmp', '-1', '-1', '0.0.0.0/0') 
-        nova.security_group_rules.create(secgroup.id, 'udp', '1', '65535', '0.0.0.0/0') 
-        nova.security_group_rules.create(secgroup.id, 'tcp', '1', '65535', '0.0.0.0/0') 
-        instance.add_security_group(secgroup.id)
 
     # API not supported by rackspace cloud
     except novaclient.exceptions.BadRequest:
@@ -581,7 +581,7 @@ if __name__ == '__main__':
   parser.add_argument('--volume-size', '-s', type=int, default=10)
   parser.add_argument('--volume-type', '-t')
   parser.add_argument('--user', '-u', default='ubuntu')
-  parser.add_argument('--secgroup', default='all')
+  parser.add_argument('--secgroup')
   parser.add_argument('--availability_zone', '-az')
 
   group = parser.add_mutually_exclusive_group()
