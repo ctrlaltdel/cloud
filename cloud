@@ -27,7 +27,7 @@ from keystoneclient import session
 from keystoneclient.v2_0 import client as keystone_client
 from novaclient import client as nova_client
 from neutronclient.v2_0 import client as neutron_client
-from cinderclient.v1 import client as cinder_client
+from cinderclient.v2 import client as cinder_client
 import keystoneauth1
 import uuid
 
@@ -295,7 +295,7 @@ def setup_environment():
     penv = os.popen('%s && %s' %(source,dump))
     env = pickle.loads(penv.read())
     os.environ = env
-  
+
   if not 'OS_PASSWORD' in os.environ:
     password = getpass("OS Password: ")
     os.environ['OS_PASSWORD'] = password
@@ -399,39 +399,14 @@ def get_bdm(nova, args):
   image_id = find_image(nova, args)
 
   if args.volume:
-
-    cinder = cinder_client.Client(
-      os.environ['OS_USERNAME'],
-      os.environ['OS_PASSWORD'],
-      os.environ['OS_TENANT_NAME'],
-      os.environ['OS_AUTH_URL']
-    )
-
-    logging.debug("Create a new volume of type %s based on image %s of size %d GB" % (args.volume_type, image_id, args.volume_size))
-    volume = cinder.volumes.create(size=args.volume_size, volume_type=args.volume_type, imageRef=image_id)
-    CLEANUPS.append(volume)
-
-    logging.debug("Volume %s created" % volume.id)
-
-    # Wait for volume creation
-    while True:
-      volume.get()
-
-      if volume.status == 'available':
-        break
-      if volume.status == 'error':
-        raise Exception('Volume creation failed')
-      else:
-        logging.debug("Volume status: %s" % (volume.status))
-        time.sleep(VOLUME_SLEEP)
-
-    logging.debug("Boot from volume %s", volume)
+    logging.debug("Booting from volume of size %s based on image %s", args.volume_size, image_id)
     bdm = [{
-      'uuid': volume.id,
-      'source_type': 'volume',
+      'uuid': image_id,
+      'source_type': 'image',
       'destination_type': 'volume',
       'delete_on_termination': True,
-      'boot_index': 0
+      'boot_index': 0,
+      'volume_size': args.volume_size,
     }]
     image = None
   else:
@@ -450,7 +425,7 @@ def upload_keypair(nova):
 
 def main(args, cloud_config):
   logging.debug("Connecting to Openstack cloud")
-  
+
   try:
     cloud = cloud_config.get_one_cloud(argparse=args)
 
@@ -484,7 +459,7 @@ def main(args, cloud_config):
     CLEANUPS.insert(0, instance)
 
     logging.debug("Instance %s" % instance.id)
-  
+
     while True:
       instance = nova.servers.get(instance.id)
       logging.debug("Instance status: %s" % instance.status)
