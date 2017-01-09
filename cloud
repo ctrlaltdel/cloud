@@ -519,6 +519,15 @@ def main(args, cloud_config):
         try:
           cleanup.delete()
           logging.debug("%s deleted", cleanup)
+
+          # wait for resource to be actually deleted
+          while True:
+            try:
+              cleanup.get()
+              time.sleep(1)
+            except novaclient.exceptions.NotFound:
+              logging.debug("Deletion of resource %s succeeded", cleanup)
+              break
         except Exception, e:
           # Known openstack bug:
           # https://bugs.launchpad.net/tempest/+bug/1586931
