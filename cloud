@@ -505,8 +505,9 @@ def main(args, cloud_config):
       else:
         ssh(['-t', '%s@%s' % (args.user, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
     elif args.command:
-      logging.debug("Executing user supplied command: %s", args.command)
-      ssh(['-t', '%s@%s' % (args.user, ssh_ip), args.command])
+      command = ' '.join(args.command)
+      logging.debug("Executing user supplied command: %s", command)
+      ssh(['-t', '%s@%s' % (args.user, ssh_ip), command])
     else:
       logging.debug("Executing interactive shell")
       ssh(['-t', '%s@%s' % (args.user, ssh_ip)])
@@ -559,7 +560,7 @@ if __name__ == '__main__':
   parser.add_argument('--floating-ip-pool')
   parser.add_argument('--permanent', '-p', action='store_true')
   parser.add_argument('--root', '-r', action='store_true')
-  parser.add_argument('--command', '-c')
+  parser.add_argument('--command', '-c', nargs='*')
   parser.add_argument('--key-name', '-k', default=KEY_NAME)
   parser.add_argument('--volume', '-v', action='store_true')
   parser.add_argument('--volume-size', '-s', type=int, default=10)
