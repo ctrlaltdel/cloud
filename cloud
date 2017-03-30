@@ -12,7 +12,6 @@ import sys
 import re
 import time
 import subprocess
-import pickle
 import tempfile
 import logging
 import argparse
@@ -310,18 +309,6 @@ class IPAddress(object):
   def __repr__(self):
     return self.address
 
-def setup_environment():
-  if not 'OS_AUTH_URL' in os.environ:
-    source = '. ~/.openrc'
-    dump = '/usr/bin/python -c "import os,pickle;print pickle.dumps(os.environ)"'
-    penv = os.popen('%s && %s' %(source,dump))
-    env = pickle.loads(penv.read())
-    os.environ = env
-
-  if not 'OS_PASSWORD' in os.environ:
-    password = getpass("OS Password: ")
-    os.environ['OS_PASSWORD'] = password
-
 def ssh(args):
   logging.debug("ssh " + repr(args))
   return subprocess.call(['ssh', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
@@ -608,7 +595,6 @@ if __name__ == '__main__':
     logging.getLogger('iso8601.iso8601').setLevel(logging.WARN)
 
   try:
-    setup_environment()
     main(args, cloud_config)
   finally:
     KNOWN_HOSTS.close()
