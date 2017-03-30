@@ -16,7 +16,6 @@ import pickle
 import tempfile
 import logging
 import argparse
-import ipaddr
 from os import environ as env
 from getpass import getpass
 import random
@@ -288,6 +287,29 @@ wheel whip whistle wilderness wind window wine wing winter wire wish
 woman women wood wool word work worm wound wren wrench wrist writer
 writing yak yam yard yarn year yoke zebra zephyr zinc zipper zoo"""
 
+# Basic and probably wrong implementation of Python's ipaddr to get rid
+# of the dependency
+class IPAddress(object):
+  # Thanks to # http://stackoverflow.com/questions/2814002/private-ip-address-identifier-in-regular-expression
+  PRIVATE_RE = '(^127\.)|(^192\.168\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^::1$)|(^[fF][cCdD])'
+
+  def __init__(self, address):
+    self.address = address
+
+  @property
+  def version(self):
+    if '.' in self.address:
+      return 4
+    elif ':' in self.address:
+      return 6
+
+  @property
+  def is_private(self):
+    return re.match(self.PRIVATE_RE, self.address)
+
+  def __repr__(self):
+    return self.address
+
 def setup_environment():
   if not 'OS_AUTH_URL' in os.environ:
     source = '. ~/.openrc'
@@ -325,7 +347,7 @@ def get_global_ip(nova, instance):
   logging.debug("Instance addresses: %s", instance.addresses)
   for net in instance.addresses:
     for address in instance.addresses[net]:
-      ip = ipaddr.IPAddress(address['addr'])
+      ip = IPAddress(address['addr'])
 
       if not ip.is_private:
         if args.prefer_ipv4 and ip.version != 4:
