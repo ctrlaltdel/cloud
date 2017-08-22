@@ -442,9 +442,9 @@ def main(args, cloud_config):
     neutron = cloud.get_legacy_client('network')
 
     try:
-      keystone = cloud.get_legacy_client('identity', version=3)
+      keystone = cloud.get_legacy_client('identity', version='3')
     except keystoneauth1.exceptions.discovery.VersionNotAvailable:
-      keystone = cloud.get_legacy_client('identity', version=2)
+      keystone = cloud.get_legacy_client('identity', version='2')
 
     flavor = get_flavor(nova, args.flavor)
     nics = []
