@@ -475,8 +475,8 @@ def main(args, cloud_config):
       if instance.status == 'ERROR':
         logging.error("Instance ID: %s" % (instance.id))
         raise Exception('Instance creation failure')
-      if instance.addresses != {}:
-        logging.debug("IP addresses present")
+      if instance.status == 'ACTIVE':
+        logging.debug("Instance is now ACTIVE")
         break
       else:
         time.sleep(INSTANCE_SLEEP)
