@@ -8,7 +8,7 @@ Installation
 
 * Install dependencies
 
-    sudo apt-get install python-openstackclient python-os-client-config
+    sudo apt-get install python-openstackclient python-os-client-config python-novaclient python-keystoneclient python-neutronclient python-cinderclient
 
 * Download `XXXX-openrc.sh` file from the OpenStack dashboard or
 * Configure `~/.config/openstack/clouds.yaml` (see [`os-client-config` documentation](https://docs.openstack.org/os-client-config/latest/user/configuration.html)).
