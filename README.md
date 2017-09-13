@@ -19,7 +19,7 @@ Usage
 Simple case: you need access to a single cloud project:
 
 * Download `XXXX-openrc.sh` file from the OpenStack dashboard
-* ```
+```
 $ source XXXX-openrc.sh
 $ cloud
 ubuntu@cloud-dependent-car:~$ logout
