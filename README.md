@@ -8,21 +8,38 @@ Installation
 
 * Install dependencies
 
-    sudo pip install ipaddr
-    sudo apt-get install python-novaclient
+    sudo apt-get install python-openstackclient python-os-client-config
 
-* Download openrc file to your computer
-** Go to Access & Security > API Access
-** Click Download OpenStack RC File
-** Put the openrc file in ~/openrc
+* Download `XXXX-openrc.sh` file from the OpenStack dashboard or
+* Configure `~/.config/openstack/clouds.yaml` (see [`os-client-config` documentation](https://docs.openstack.org/os-client-config/latest/user/configuration.html)).
 
 Usage
 -----
 
-* Source openrc file, from your .bashrc for instance
+Simple case: you need access to a single cloud project:
 
- echo '. ~/openrc' >> ~/.bashrc
+* Download `XXXX-openrc.sh` file from the OpenStack dashboard
+* ```
+$ source XXXX-openrc.sh
+$ cloud
+ubuntu@cloud-dependent-car:~$ logout
 
-* Run the script without argument to launch a VM !
-* ./cloud -h # for help
+$
+```
 
+Second case: you need access to multiple cloud projects at the same time and
+you've already configured your `~/.config/openstack/clouds.yaml` file
+accordingly:
+
+```
+$ cloud --os-cloud CLOUD_NAME
+ubuntu@cloud-tidy-window:~$ logout
+
+$
+```
+
+Help command will tell you the many other options available:
+
+```
+$ cloud -h
+```
