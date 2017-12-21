@@ -470,16 +470,22 @@ def main(args, cloud_config):
     logging.debug("Instance %s" % instance.id)
 
     while True:
-      instance = nova.servers.get(instance.id)
-      logging.debug("Instance status: %s" % instance.status)
-      if instance.status == 'ERROR':
-        logging.error("Instance ID: %s" % (instance.id))
-        raise Exception('Instance creation failure')
-      if instance.status == 'ACTIVE':
-        logging.debug("Instance is now ACTIVE")
-        break
-      else:
-        time.sleep(INSTANCE_SLEEP)
+      try:
+        instance = nova.servers.get(instance.id)
+
+        logging.debug("Instance status: %s" % instance.status)
+        if instance.status == 'ERROR':
+          logging.error("Instance ID: %s" % (instance.id))
+          raise Exception('Instance creation failure')
+        if instance.status == 'ACTIVE':
+          logging.debug("Instance is now ACTIVE")
+          break
+        else:
+          time.sleep(INSTANCE_SLEEP)
+
+      except keystoneauth1.exceptions.connection.ConnectFailure:
+        logging.error("Keystone connection failed, retrying...")
+        continue
 
     ssh_ip = get_global_ip(nova, instance)
     logging.debug("Globally reachable IP: %s", ssh_ip)
