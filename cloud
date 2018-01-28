@@ -397,15 +397,15 @@ def get_nic(neutron, keystone, net):
 
   return nic
 
-def find_image(nova, args):
-  for image in nova.images.list():
+def find_image(glance, args):
+  for image in glance.images.list():
     if image.name and re.match(args.image, image.name, re.IGNORECASE):
       return image.id
 
   raise Exception("Image %s not found!" % args.image)
 
-def get_bdm(nova, args):
-  image_id = find_image(nova, args)
+def get_bdm(nova, glance, args):
+  image_id = find_image(glance, args)
 
   if args.volume:
     logging.debug("Booting from volume of size %s based on image %s", args.volume_size, image_id)
@@ -440,6 +440,7 @@ def main(args, cloud_config):
 
     nova = cloud.get_legacy_client('compute')
     neutron = cloud.get_legacy_client('network')
+    glance = cloud.get_legacy_client('image')
 
     try:
       keystone = cloud.get_legacy_client('identity', version='3')
@@ -452,7 +453,7 @@ def main(args, cloud_config):
       for net in args.net:
         nics.append(get_nic(neutron, keystone, net))
     logging.debug('Nics: %s' % (nics))
-    bdm, image = get_bdm(nova, args)
+    bdm, image = get_bdm(nova, glance, args)
 
     upload_keypair(nova)
 
