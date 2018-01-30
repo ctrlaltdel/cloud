@@ -288,10 +288,15 @@ def find_image(cloud, args):
     image = cloud.get_image(args.image)
 
     if not image:
+        try:
+            from urllib import urlretrieve, urlcleanup
+        except ImportError:
+            from urllib.request import urlretrieve, urlcleanup
+
         print("Default image not found, downloading {} from {}.".format(IMAGE_NAME, IMAGE_URL))
-        (tmpfile, _) = urllib.urlretrieve(IMAGE_URL)
+        (tmpfile, _) = urlretrieve(IMAGE_URL)
         image = cloud.create_image(IMAGE_NAME, filename=tmpfile, wait=True)
-        urllib.urlcleanup()
+        urlcleanup()
 
     return image
 
