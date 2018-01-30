@@ -6,39 +6,29 @@
 # Francois Deppierraz <francois.deppierraz@infraly.ch>
 #
 # License GPLv2+ applies
+#
+# Tested on Debian 9 with the following packages installed:
+#   - python-shade=1.7.0-2
+#   - python-os-client-config=1.16.0-1
 
 import os
 import sys
-import re
 import time
 import subprocess
 import tempfile
 import logging
 import argparse
-from os import environ as env
-from getpass import getpass
 import random
+import urllib
+import shade
 import os_client_config
-import novaclient
-from keystoneclient.auth.identity import v2
-from keystoneclient import session
-from keystoneclient.v2_0 import client as keystone_client
-from novaclient import client as nova_client
-from neutronclient.v2_0 import client as neutron_client
-from cinderclient.v2 import client as cinder_client
-import keystoneauth1
-import uuid
 
-IMAGE     = 'ubuntu|xenial'
-FLAVOR    = 'm1.small'
-KEY_NAME  = os.environ['USER']
+KEY_NAME = os.environ['USER']
+FLAVOR_RAM = 512
+IMAGE_NAME = 'bionic-server-cloudimg-amd64'
+IMAGE_URL = 'https://cloud-images.ubuntu.com/bionic/current/bionic-server-cloudimg-amd64.img'
 
 SSH_SLEEP = 1
-INSTANCE_SLEEP = 5
-VOLUME_SLEEP = 1
-
-KNOWN_HOSTS = tempfile.NamedTemporaryFile()
-CLEANUPS = []
 
 # Copied from http://bazaar.launchpad.net/~maas-committers/maas/trunk/view/head:/src/maasserver/migrations/0103_candidate_names.py
 ADJECTIVES = """\
@@ -286,322 +276,156 @@ wheel whip whistle wilderness wind window wine wing winter wire wish
 woman women wood wool word work worm wound wren wrench wrist writer
 writing yak yam yard yarn year yoke zebra zephyr zinc zipper zoo"""
 
-# Basic and probably wrong implementation of Python's ipaddr to get rid
-# of the dependency
-class IPAddress(object):
-  # Thanks to # http://stackoverflow.com/questions/2814002/private-ip-address-identifier-in-regular-expression
-  PRIVATE_RE = '(^127\.)|(^192\.168\.)|(^10\.)|(^172\.1[6-9]\.)|(^172\.2[0-9]\.)|(^172\.3[0-1]\.)|(^::1$)|(^[fF][cCdD])'
-
-  def __init__(self, address):
-    self.address = address
-
-  @property
-  def version(self):
-    if '.' in self.address:
-      return 4
-    elif ':' in self.address:
-      return 6
-
-  @property
-  def is_private(self):
-    return re.match(self.PRIVATE_RE, self.address)
-
-  def __repr__(self):
-    return self.address
-
 def ssh(args):
-  logging.debug("ssh " + repr(args))
-  return subprocess.call(['ssh', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
+    logging.debug("ssh " + repr(args))
+    return subprocess.call(['ssh', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
 def scp(args):
-  logging.debug("scp" + repr(args))
-  return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
+    logging.debug("scp" + repr(args))
+    return subprocess.call(['scp', '-q', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=%s' % KNOWN_HOSTS.name] + args)
 
-def get_floating_ip_pool(nova):
-  if args.floating_ip_pool:
-    for p in nova.floating_ip_pools.list():
-      logging.debug('Nova floating ip pool: %s', p)
-      if p.name == args.floating_ip_pool:
-        return p
+def find_image(cloud, args):
+    image = cloud.get_image(args.image)
 
-    # No specified pool found
-    raise Exception('Floating IP pool %s not found', args.floating_ip_pool)
-  else:
-    # No specific pool request, let's just return the first one
-    return nova.floating_ip_pools.list()[0]
+    if not image:
+        print("Default image not found, downloading {} from {}.".format(IMAGE_NAME, IMAGE_URL))
+        (tmpfile, _) = urllib.urlretrieve(IMAGE_URL)
+        image = cloud.create_image(IMAGE_NAME, filename=tmpfile, wait=True)
+        urllib.urlcleanup()
 
-def get_global_ip(nova, instance):
-  logging.debug("Instance addresses: %s", instance.addresses)
-  for net in instance.addresses:
-    for address in instance.addresses[net]:
-      ip = IPAddress(address['addr'])
+    return image
 
-      if not ip.is_private:
-        if args.prefer_ipv4 and ip.version != 4:
-          logging.debug("%s address is not IPv4", ip)
-          continue
-
-        if args.prefer_ipv6 and ip.version != 6:
-          logging.debug("%s address is not IPv6", ip)
-          continue
-
-        logging.debug("Found global IP address: %s", ip)
-        return ip
-
-  if args.no_floating_ip:
-    return ip
-
-  pool = get_floating_ip_pool(nova)
-
-  ip = nova.floating_ips.create(pool.name)
-  CLEANUPS.append(ip)
-  logging.debug("Floating IP %s" % ip.ip)
-  instance.add_floating_ip(ip)
-  return ip.ip
-
-def get_flavor(nova, name):
-  for flavor in nova.flavors.list():
-    if name in flavor.name:
-      return flavor
-  raise Exception('No flavor %s found' % name)
-
-def get_nic(neutron, keystone, net):
-  try:
-    neutron.list_networks()
-  except Exception, e:
-    logging.warn("No neutron support found, let's hope nova will handle the network")
-    logging.exception(e)
-    return None
-
-  if net:
-    nets = neutron.list_networks(name=net)['networks']
-
-    logging.debug("Available networks: %s", nets)
-
-    try:
-      nic = {'net-id': nets[0]['id']}
-    except novaclient.exceptions.NotFound:
-      raise Exception("Network %s not found" % net)
-  else:
-    # From horizon/openstack_dashboard/api/neutron.py network_list_for_tenant()
-    nets = neutron.list_networks(tenant_id=keystone.tenant_id, shared=False)['networks']
-    nets += neutron.list_networks(shared=True)['networks']
-
-    assert(len(nets) > 0)
-    if len(nets) == 1:
-      net = nets[0]['id']
-      logging.debug("Connecting instance to the only available network %s", net)
-      nic = {'net-id': net}
+def find_flavor(cloud, args):
+    if args.flavor:
+        flavor = cloud.get_flavor(args.flavor)
     else:
-      raise Exception("Multiple networks found (%s), please specify which one the instance should use with --net" % [net['name'] for net in nets])
+        flavor = cloud.get_flavor_by_ram(FLAVOR_RAM)
 
-  return nic
+    return flavor
 
-def find_image(glance, args):
-  for image in glance.images.list():
-    if image.name and re.match(args.image, image.name, re.IGNORECASE):
-      return image.id
-
-  raise Exception("Image %s not found!" % args.image)
-
-def get_bdm(nova, glance, args):
-  image_id = find_image(glance, args)
-
-  if args.volume:
-    logging.debug("Booting from volume of size %s based on image %s", args.volume_size, image_id)
-    bdm = [{
-      'uuid': image_id,
-      'source_type': 'image',
-      'destination_type': 'volume',
-      'delete_on_termination': True,
-      'boot_index': 0,
-      'volume_size': args.volume_size,
-    }]
-    image = None
-  else:
-    bdm = None
-    image = image_id
-
-  return bdm, image
-
-def upload_keypair(nova):
-  key_names = map(lambda k: k.name, nova.keypairs.list())
-
-  if args.key_name not in key_names:
-    with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as f:
-        public_key = f.read()
-        nova.keypairs.create(args.key_name, public_key)
-
-def main(args, cloud_config):
-  logging.debug("Connecting to Openstack cloud")
-
-  try:
-    cloud = cloud_config.get_one_cloud(argparse=args)
-
-    nova = cloud.get_legacy_client('compute')
-    neutron = cloud.get_legacy_client('network')
-    glance = cloud.get_legacy_client('image')
-
-    try:
-      keystone = cloud.get_legacy_client('identity', version='3')
-    except keystoneauth1.exceptions.discovery.VersionNotAvailable:
-      keystone = cloud.get_legacy_client('identity', version='2')
-
-    flavor = get_flavor(nova, args.flavor)
-    nics = []
-    if args.net:
-      for net in args.net:
-        nics.append(get_nic(neutron, keystone, net))
-    logging.debug('Nics: %s' % (nics))
-    bdm, image = get_bdm(nova, glance, args)
-
-    upload_keypair(nova)
-
-    instance = nova.servers.create(
-      name=args.name,
-      image=image,
-      flavor=flavor.id,
-      key_name=args.key_name,
-      nics=nics,
-      block_device_mapping_v2 = bdm,
-      availability_zone = args.availability_zone
-    )
-    CLEANUPS.insert(0, instance)
-
-    logging.debug("Instance %s" % instance.id)
-
-    while True:
-      try:
-        instance = nova.servers.get(instance.id)
-
-        logging.debug("Instance status: %s" % instance.status)
-        if instance.status == 'ERROR':
-          logging.error("Instance ID: %s" % (instance.id))
-          raise Exception('Instance creation failure')
-        if instance.status == 'ACTIVE':
-          logging.debug("Instance is now ACTIVE")
-          break
-        else:
-          time.sleep(INSTANCE_SLEEP)
-
-      except keystoneauth1.exceptions.connection.ConnectFailure:
-        logging.error("Keystone connection failed, retrying...")
-        continue
-
-    ssh_ip = get_global_ip(nova, instance)
-    logging.debug("Globally reachable IP: %s", ssh_ip)
-
-    if not args.secgroup:
-      random_uuid = uuid.uuid4()
-      secgroup = nova.security_groups.create('cloud-%s' % random_uuid, 'Auto-generated security group')
-      nova.security_group_rules.create(secgroup.id, 'icmp', '8', '0', '0.0.0.0/0')
-      nova.security_group_rules.create(secgroup.id, 'tcp', '22', '22', '0.0.0.0/0')
-      instance.add_security_group(secgroup.id)
-      CLEANUPS.append(secgroup)
-
-    try:
-      instance.add_security_group(args.secgroup)
-
-    # API not supported by rackspace cloud
-    except novaclient.exceptions.BadRequest:
-      pass
-
-    while True:
-      res = ssh(['%s@%s' % (args.user, ssh_ip), 'echo'])
-      if res == 0:
-        break
-      else:
-        time.sleep(SSH_SLEEP)
-
-    if args.script:
-      logging.debug("Executing user supplied script: %s", args.script)
-      scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, ssh_ip)])
-      if args.root:
-        ssh(['-t', '%s@%s' % (args.user, ssh_ip), 'chmod +x /tmp/script && sudo /tmp/script'])
-      else:
-        ssh(['-t', '%s@%s' % (args.user, ssh_ip), 'chmod +x /tmp/script && /tmp/script'])
-    elif args.command:
-      command = ' '.join(args.command)
-      logging.debug("Executing user supplied command: %s", command)
-      ssh(['-t', '%s@%s' % (args.user, ssh_ip), command])
-    else:
-      logging.debug("Executing interactive shell")
-      ssh(['-t', '%s@%s' % (args.user, ssh_ip)])
-
-  finally:
-    if not args.permanent:
-      logging.debug("Cleanup...")
-
-      for cleanup in CLEANUPS:
-        try:
-          cleanup.delete()
-          logging.debug("%s deleted", cleanup)
-
-          # wait for resource to be actually deleted
-          while True:
-            try:
-              cleanup.get()
-              time.sleep(1)
-            except novaclient.exceptions.NotFound:
-              logging.debug("Deletion of resource %s succeeded", cleanup)
-              break
-        except Exception, e:
-          # Known openstack bug:
-          # https://bugs.launchpad.net/tempest/+bug/1586931
-          if 'neutronclient.common.exceptions.PortNotFoundClient' in e.message:
-            break
-
-          logging.warn("Deletion of resource %s failed", cleanup)
-          logging.exception(e)
+def upload_keypair(cloud, args):
+    if not cloud.get_keypair(args.key_name):
+        with open(os.path.expanduser('~/.ssh/id_rsa.pub')) as pub:
+            public_key = pub.read()
+            cloud.create_keypair(args.key_name, public_key)
 
 def get_hostname():
-  adjective = random.choice(ADJECTIVES.replace('\n', ' ').strip().split(' '))
-  noun = random.choice(NOUNS.replace('\n', ' ').strip().split(' '))
+    adjective = random.choice(ADJECTIVES.replace('\n', ' ').strip().split(' '))
+    noun = random.choice(NOUNS.replace('\n', ' ').strip().split(' '))
 
-  return 'cloud-%s-%s' % (adjective, noun)
+    return 'cloud-%s-%s' % (adjective, noun)
 
 def usage():
-  print("Usage: %s [script]" % sys.argv[0])
+    print("Usage: %s [script]" % sys.argv[0])
+
+def main():
+    parser = argparse.ArgumentParser(description='Easy to use tool for spawning disposable VM on an Openstack')
+    parser.add_argument('--debug', '-d', action='store_true')
+    parser.add_argument('--image', '-i', default=IMAGE_NAME)
+    parser.add_argument('--flavor', '-f')
+    parser.add_argument('--name', '-n', default=get_hostname())
+    parser.add_argument('--net', default=None)
+    parser.add_argument('--no-floating-ip', action='store_true')
+    parser.add_argument('--floating-ip-pool')
+    parser.add_argument('--permanent', '-p', action='store_true')
+    parser.add_argument('--root', '-r', action='store_true')
+    parser.add_argument('--command', '-c', nargs='*')
+    parser.add_argument('--key-name', '-k', default=KEY_NAME)
+    parser.add_argument('--volume', '-v', action='store_true')
+    parser.add_argument('--volume-size', '-s', type=int, default=10)
+    parser.add_argument('--volume-type', '-t')
+    parser.add_argument('--user', '-u', default='ubuntu')
+    parser.add_argument('--secgroup')
+    parser.add_argument('--availability_zone', '-az')
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--prefer-ipv4', '-4', action='store_true')
+    group.add_argument('--prefer-ipv6', '-6', action='store_true')
+
+    parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
+
+    cloud_config = os_client_config.OpenStackConfig()
+    cloud_config.register_argparse_arguments(parser, sys.argv)
+
+    args = parser.parse_args()
+
+    if args.debug:
+        logger = logging.getLogger()
+        logger.setLevel(logging.DEBUG)
+        logging.getLogger('iso8601.iso8601').setLevel(logging.WARN)
+
+    config = cloud_config.get_one_cloud(argparse=args)
+    cloud = shade.OpenStackCloud(cloud_config=config)
+
+    logging.debug("Connecting to Openstack cloud")
+
+    upload_keypair(cloud, args)
+
+    image = find_image(cloud, args)
+    flavor = find_flavor(cloud, args)
+    server = None
+    secgroup = None
+
+    try:
+        if not args.secgroup:
+            secgroup = cloud.create_security_group(args.name, 'Automatically generated security group')
+            cloud.create_security_group_rule(secgroup['id'], direction='ingress', protocol='icmp', port_range_max='8', port_range_min='0', remote_ip_prefix='0.0.0.0/0')
+            cloud.create_security_group_rule(secgroup['id'], direction='ingress', protocol='tcp', port_range_max='22', port_range_min='22', remote_ip_prefix='0.0.0.0/0')
+            args.secgroup = secgroup['id']
+
+        server = cloud.create_server(
+            args.name,
+            image.id,
+            flavor.id,
+            ip_pool=args.floating_ip_pool,
+            security_groups=[args.secgroup],
+            key_name=args.key_name,
+            availability_zone=args.availability_zone,
+            wait=True,
+            network=args.net,
+            boot_from_volume=args.volume,
+            volume_size=args.volume_size,
+            terminate_volume=True
+        )
+
+        logging.debug("Instance %s" % server.id)
+
+        while True:
+            res = ssh(['%s@%s' % (args.user, server.accessIPv4), 'echo'])
+            if res == 0:
+                break
+            else:
+                time.sleep(SSH_SLEEP)
+
+        if args.script:
+            logging.debug("Executing user supplied script: %s", args.script)
+            scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, server.accessIPv4)])
+            if args.root:
+                ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && sudo /tmp/script'])
+            else:
+                ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && /tmp/script'])
+        elif args.command:
+            command = ' '.join(args.command)
+            logging.debug("Executing user supplied command: %s", command)
+            ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), command])
+        else:
+            logging.debug("Executing interactive shell")
+            ssh(['-t', '%s@%s' % (args.user, server.accessIPv4)])
+
+    except Exception as ex:
+        logging.exception(ex)
+
+    finally:
+        if not args.permanent:
+            logging.debug("Cleanup...")
+
+            if server:
+                cloud.delete_server(server, wait=True, timeout=180, delete_ips=True)
+
+            if secgroup:
+                cloud.delete_security_group(secgroup['id'])
 
 if __name__ == '__main__':
-  global DEBUG
-
-  parser = argparse.ArgumentParser(description='Easy to use tool for spawning disposable VM on an Openstack')
-  parser.add_argument('--debug', '-d', action='store_true')
-  parser.add_argument('--image', '-i', default=IMAGE)
-  parser.add_argument('--flavor', '-f', default=FLAVOR)
-  parser.add_argument('--name', '-n', default=get_hostname())
-  parser.add_argument('--net', action='append')
-  parser.add_argument('--no-floating-ip', action='store_true')
-  parser.add_argument('--floating-ip-pool')
-  parser.add_argument('--permanent', '-p', action='store_true')
-  parser.add_argument('--root', '-r', action='store_true')
-  parser.add_argument('--command', '-c', nargs='*')
-  parser.add_argument('--key-name', '-k', default=KEY_NAME)
-  parser.add_argument('--volume', '-v', action='store_true')
-  parser.add_argument('--volume-size', '-s', type=int, default=10)
-  parser.add_argument('--volume-type', '-t')
-  parser.add_argument('--user', '-u', default='ubuntu')
-  parser.add_argument('--secgroup')
-  parser.add_argument('--availability_zone', '-az')
-
-  group = parser.add_mutually_exclusive_group()
-  group.add_argument('--prefer-ipv4', '-4', action='store_true')
-  group.add_argument('--prefer-ipv6', '-6', action='store_true')
-
-  parser.add_argument('script', nargs='?', default=False, help='Script that will automatically be run inside the VM')
-
-  cloud_config = os_client_config.OpenStackConfig()
-  cloud_config.register_argparse_arguments(parser, sys.argv)
-  args = parser.parse_args()
-
-  if args.debug:
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
-    logging.getLogger('iso8601.iso8601').setLevel(logging.WARN)
-
-  try:
-    main(args, cloud_config)
-  finally:
+    KNOWN_HOSTS = tempfile.NamedTemporaryFile()
+    main()
     KNOWN_HOSTS.close()
