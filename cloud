@@ -378,6 +378,11 @@ def main():
             cloud.create_security_group_rule(secgroup['id'], direction='ingress', protocol='tcp', port_range_max='22', port_range_min='22', remote_ip_prefix='0.0.0.0/0')
             args.secgroup = secgroup['id']
 
+        kwargs = {}
+
+        if args.availability_zone:
+            kwargs['availability_zone'] = args.availability_zone
+
         server = cloud.create_server(
             args.name,
             image.id,
@@ -385,12 +390,12 @@ def main():
             ip_pool=args.floating_ip_pool,
             security_groups=[args.secgroup],
             key_name=args.key_name,
-            availability_zone=args.availability_zone,
             wait=True,
             network=args.net,
             boot_from_volume=args.volume,
             volume_size=args.volume_size,
-            terminate_volume=True
+            terminate_volume=True,
+	        **kwargs
         )
 
         logging.debug("Instance %s" % server.id)
