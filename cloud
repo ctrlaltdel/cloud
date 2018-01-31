@@ -395,7 +395,7 @@ def main():
             boot_from_volume=args.volume,
             volume_size=args.volume_size,
             terminate_volume=True,
-	        **kwargs
+            **kwargs
         )
 
         logging.debug("Instance %s" % server.id)
