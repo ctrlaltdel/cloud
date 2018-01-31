@@ -27,6 +27,7 @@ KEY_NAME = os.environ['USER']
 FLAVOR_RAM = 512
 IMAGE_NAME = 'bionic-server-cloudimg-amd64'
 IMAGE_URL = 'https://cloud-images.ubuntu.com/bionic/current/bionic-server-cloudimg-amd64.img'
+ERROR_EXIT_STATUS = 70
 
 SSH_SLEEP = 1
 
@@ -322,6 +323,7 @@ def get_hostname():
 
 def usage():
     print("Usage: %s [script]" % sys.argv[0])
+    sys.exit(64)
 
 def main():
     parser = argparse.ArgumentParser(description='Easy to use tool for spawning disposable VM on an Openstack')
@@ -411,19 +413,20 @@ def main():
             logging.debug("Executing user supplied script: %s", args.script)
             scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, server.accessIPv4)])
             if args.root:
-                ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && sudo /tmp/script'])
+                exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && sudo /tmp/script'])
             else:
-                ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && /tmp/script'])
+                exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && /tmp/script'])
         elif args.command:
             command = ' '.join(args.command)
             logging.debug("Executing user supplied command: %s", command)
-            ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), command])
+            exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), command])
         else:
             logging.debug("Executing interactive shell")
-            ssh(['-t', '%s@%s' % (args.user, server.accessIPv4)])
+            exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4)])
 
     except Exception as ex:
         logging.exception(ex)
+        return ERROR_EXIT_STATUS
 
     finally:
         if not args.permanent:
@@ -435,7 +438,11 @@ def main():
             if secgroup:
                 cloud.delete_security_group(secgroup['id'])
 
+    return(exit_status)
+
 if __name__ == '__main__':
     KNOWN_HOSTS = tempfile.NamedTemporaryFile()
-    main()
+    exit_status = main()
     KNOWN_HOSTS.close()
+
+    sys.exit(exit_status)
