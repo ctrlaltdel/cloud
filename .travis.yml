@@ -3,5 +3,8 @@ virtualenv:
   system_site_packages: true
 install:
   - pip install -r requirements.txt
+  - ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 script:
   - pytest -v
+after_script:
+  - openstack keypair delete travis
