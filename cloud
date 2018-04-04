@@ -343,7 +343,7 @@ def main():
     parser.add_argument('--volume-type', '-t')
     parser.add_argument('--user', '-u', default='ubuntu')
     parser.add_argument('--secgroup')
-    parser.add_argument('--availability_zone', '-az')
+    parser.add_argument('--availability-zone', '-az')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--prefer-ipv4', '-4', action='store_true')
