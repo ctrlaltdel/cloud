@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # cloud - an easy to use tool for spawning disposable VM on an Openstack
 #         cloud
@@ -397,13 +397,19 @@ def main():
             boot_from_volume=args.volume,
             volume_size=args.volume_size,
             terminate_volume=True,
+            auto_ip=not args.no_floating_ip,
             **kwargs
         )
 
         logging.debug("Instance %s" % server.id)
 
+        if args.no_floating_ip:
+            ip = server.private_v4
+        else:
+            ip = server.public_v4
+
         while True:
-            res = ssh(['%s@%s' % (args.user, server.accessIPv4), 'echo'])
+            res = ssh(['%s@%s' % (args.user, ip), 'echo'])
             if res == 0:
                 break
             else:
@@ -411,18 +417,18 @@ def main():
 
         if args.script:
             logging.debug("Executing user supplied script: %s", args.script)
-            scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, server.accessIPv4)])
+            scp([os.path.abspath(args.script), '%s@%s:/tmp/script' % (args.user, ip)])
             if args.root:
-                exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && sudo /tmp/script'])
+                exit_status = ssh(['-t', '%s@%s' % (args.user, ip), 'chmod +x /tmp/script && sudo /tmp/script'])
             else:
-                exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), 'chmod +x /tmp/script && /tmp/script'])
+                exit_status = ssh(['-t', '%s@%s' % (args.user, ip), 'chmod +x /tmp/script && /tmp/script'])
         elif args.command:
             command = ' '.join(args.command)
             logging.debug("Executing user supplied command: %s", command)
-            exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4), command])
+            exit_status = ssh(['-t', '%s@%s' % (args.user, ip), command])
         else:
             logging.debug("Executing interactive shell")
-            exit_status = ssh(['-t', '%s@%s' % (args.user, server.accessIPv4)])
+            exit_status = ssh(['-t', '%s@%s' % (args.user, ip)])
 
     except Exception as ex:
         logging.exception(ex)

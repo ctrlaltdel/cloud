@@ -6,6 +6,8 @@ cloud - an easy to use tool for spawning disposable VM on an Openstack cloud
 Installation
 ------------
 
+Needs Python 3
+
 * Install dependencies
 
     sudo apt-get install python-shade python-os-client-config
